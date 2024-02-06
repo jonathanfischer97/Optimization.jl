@@ -11,6 +11,7 @@ SciMLBase.supports_opt_cache_interface(opt::Evolutionary.AbstractOptimizer) = tr
 decompose_trace(trace::Evolutionary.OptimizationTrace) = last(trace)
 decompose_trace(trace::Evolutionary.OptimizationTraceRecord) = trace
 
+#todo Make this work with user overloads which might now include x 
 function Evolutionary.trace!(record::Dict{String, Any}, objfun, state, population,
         method::Evolutionary.AbstractOptimizer, options)
     record["x"] = population
@@ -84,6 +85,7 @@ function SciMLBase.__solve(cache::OptimizationCache{
 
     cur, state = iterate(cache.data)
 
+    # Internal callback function called on trace after every iteration 
     function _cb(trace)
         curr_u = decompose_trace(trace).metadata["x"][end]
         opt_state = Optimization.OptimizationState(;
@@ -102,13 +104,16 @@ function SciMLBase.__solve(cache::OptimizationCache{
     maxiters = Optimization._check_and_convert_maxiters(cache.solver_args.maxiters)
     maxtime = Optimization._check_and_convert_maxtime(cache.solver_args.maxtime)
 
+    # Get OptimizationFunction
     f = cache.f
 
+    # Define the loss function as closure, returns the value of the OptimizationFunction for θ
     _loss = function (θ)
         x = f(θ, cache.p, cur...)
-        return first(x)
+        return x
     end
 
+    # Retrieve keyword arguments for the optimizer
     opt_args = __map_optimizer_args(cache, cache.opt; callback = _cb, cache.solver_args...,
         maxiters = maxiters,
         maxtime = maxtime)
