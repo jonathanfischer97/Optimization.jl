@@ -23,6 +23,7 @@ function __map_optimizer_args(cache::OptimizationCache,
         maxtime::Union{Number, Nothing} = nothing,
         abstol::Union{Number, Nothing} = nothing,
         reltol::Union{Number, Nothing} = nothing,
+        initial_population::Union{AbstractArray, Nothing} = nothing,
         kwargs...)
     mapped_args = (; kwargs...)
 
@@ -112,15 +113,29 @@ function SciMLBase.__solve(cache::OptimizationCache{
         maxiters = maxiters,
         maxtime = maxtime)
 
+    # Extract initial_population from solver_args if provided
+    initial_population = get(cache.solver_args, :initial_population, nothing)
+
     t0 = time()
     if isnothing(cache.lb) || isnothing(cache.ub)
         if !isnothing(f.cons)
             c = x -> (res = zeros(length(cache.lcons)); f.cons(res, x); res)
             cons = WorstFitnessConstraints(Float64[], Float64[], cache.lcons, cache.ucons,
                 c)
-            opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
+            # Check if initial_population is provided from solver_args
+            if isnothing(initial_population)
+                opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
+            else
+                opt_res = Evolutionary.optimize(_loss, cons, cache.opt, initial_population, opt_args)
+            end
+            # opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
         else
-            opt_res = Evolutionary.optimize(_loss, cache.u0, cache.opt, opt_args)
+            if isnothing(initial_population)
+                opt_res = Evolutionary.optimize(_loss, cache.u0, cache.opt, opt_args)
+            else
+                opt_res = Evolutionary.optimize(_loss, cache.opt, initial_population, opt_args)
+            end
+            # opt_res = Evolutionary.optimize(_loss, cache.u0, cache.opt, opt_args)
         end
     else
         if !isnothing(f.cons)
@@ -129,7 +144,13 @@ function SciMLBase.__solve(cache::OptimizationCache{
         else
             cons = BoxConstraints(cache.lb, cache.ub)
         end
-        opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
+
+        if isnothing(initial_population)
+            opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
+        else
+            opt_res = Evolutionary.optimize(_loss, cons, cache.opt, initial_population, opt_args)
+        end
+        # opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
     end
     t1 = time()
     opt_ret = Symbol(Evolutionary.converged(opt_res))
