@@ -47,7 +47,6 @@ Random.seed!(1234)
     function Evolutionary.trace!(record::Dict{String, Any}, objfun, state, population, method::CMAES, options)
         # record fittest individual
         record["TESTVAL"] = state.fittest
-        # println("TESTVAL: ", record["TESTVAL"])
     end
 
     #test that `store_trace=true` works now. Threw ""type Array has no field value" before.
