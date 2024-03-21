@@ -31,7 +31,8 @@ function Optimization.OptimizationCache(prob::SciMLBase.OptimizationProblem,
         throw("We evaluate the jacobian and hessian of the constraints once to automatically detect 
         linear and nonlinear constraints, please provide a valid AD backend for using COBYLA.")
     else
-        f = Optimization.instantiate_function(prob.f, reinit_cache, prob.f.adtype, num_cons)
+        f = Optimization.instantiate_function(
+            prob.f, reinit_cache.u0, prob.f.adtype, reinit_cache.p, num_cons)
     end
 
     return Optimization.OptimizationCache(f, reinit_cache, prob.lb, prob.ub, prob.lcons,
@@ -80,15 +81,16 @@ function __map_optimizer_args!(cache::Optimization.OptimizationCache, opt::PRIMA
 end
 
 function sciml_prima_retcode(rc::AbstractString)
-    if rc in ["SMALL_TR_RADIUS", "TRSUBP_FAILED", "NAN_INF_X", "NAN_INF_F", "NAN_INF_MODEL",
+    if rc in [
+        "SMALL_TR_RADIUS", "TRSUBP_FAILED", "NAN_INF_X", "NAN_INF_F", "NAN_INF_MODEL",
         "DAMAGING_ROUNDING", "ZERO_LINEAR_CONSTRAINT", "INVALID_INPUT", "ASSERTION_FAILS",
         "VALIDATION_FAILS", "MEMORY_ALLOCATION_FAILS"]
         return ReturnCode.Failure
     else
         rc in ["FTARGET_ACHIEVED"
-            "MAXFUN_REACHED"
-            "MAXTR_REACHED"
-            "NO_SPACE_BETWEEN_BOUNDS"]
+               "MAXFUN_REACHED"
+               "MAXTR_REACHED"
+               "NO_SPACE_BETWEEN_BOUNDS"]
         return ReturnCode.Success
     end
 end
@@ -104,7 +106,7 @@ function SciMLBase.__solve(cache::Optimization.OptimizationCache{
         O,
         D,
         P,
-        C,
+        C
 }) where {
         F,
         RC,
@@ -116,7 +118,7 @@ function SciMLBase.__solve(cache::Optimization.OptimizationCache{
         O <: PRIMASolvers,
         D,
         P,
-        C,
+        C
 }
     _loss = function (θ)
         x = cache.f(θ, cache.p)

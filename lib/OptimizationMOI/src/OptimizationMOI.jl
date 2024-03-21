@@ -4,9 +4,10 @@ using Reexport
 @reexport using Optimization
 using MathOptInterface
 using Optimization.SciMLBase
+using SciMLStructures
 using SymbolicIndexingInterface
 using SparseArrays
-import ModelingToolkit: parameters, states, varmap_to_vars, mergedefaults, toexpr
+import ModelingToolkit: parameters, unknowns, varmap_to_vars, mergedefaults, toexpr
 import ModelingToolkit
 const MTK = ModelingToolkit
 using Symbolics
@@ -35,7 +36,8 @@ function _create_new_optimizer(opt::MOI.AbstractOptimizer)
     if MOI.supports_incremental_interface(opt)
         return opt
     end
-    opt_setup = MOI.Utilities.CachingOptimizer(MOI.Utilities.UniversalFallback(MOI.Utilities.Model{
+    opt_setup = MOI.Utilities.CachingOptimizer(
+        MOI.Utilities.UniversalFallback(MOI.Utilities.Model{
             Float64,
         }()),
         opt)
@@ -74,7 +76,7 @@ function __moi_status_to_ReturnCode(status::MOI.TerminationStatusCode)
         MOI.OPTIMAL,
         MOI.LOCALLY_SOLVED,
         MOI.ALMOST_OPTIMAL,
-        MOI.ALMOST_LOCALLY_SOLVED,
+        MOI.ALMOST_LOCALLY_SOLVED
     ]
         return ReturnCode.Success
     elseif status in [
@@ -83,13 +85,13 @@ function __moi_status_to_ReturnCode(status::MOI.TerminationStatusCode)
         MOI.LOCALLY_INFEASIBLE,
         MOI.INFEASIBLE_OR_UNBOUNDED,
         MOI.ALMOST_INFEASIBLE,
-        MOI.ALMOST_DUAL_INFEASIBLE,
+        MOI.ALMOST_DUAL_INFEASIBLE
     ]
         return ReturnCode.Infeasible
     elseif status in [
         MOI.ITERATION_LIMIT,
         MOI.NODE_LIMIT,
-        MOI.SLOW_PROGRESS,
+        MOI.SLOW_PROGRESS
     ]
         return ReturnCode.MaxIters
     elseif status == MOI.TIME_LIMIT
@@ -105,7 +107,7 @@ function __moi_status_to_ReturnCode(status::MOI.TerminationStatusCode)
         MOI.MEMORY_LIMIT,
         MOI.OBJECTIVE_LIMIT,
         MOI.NORM_LIMIT,
-        MOI.OTHER_LIMIT,
+        MOI.OTHER_LIMIT
     ]
         return ReturnCode.Failure
     else
@@ -182,13 +184,14 @@ end
 """
     convert_to_expr(eq, sys; expand_expr = false, pairs_arr = expr_map(sys))
 
-Converts the given symbolic expression to a Julia `Expr` and replaces all symbols, i.e. states and
+Converts the given symbolic expression to a Julia `Expr` and replaces all symbols, i.e. unknowns and
 parameters with `x[i]` and `p[i]`.
 
 # Arguments:
-- `eq`: Expression to convert
-- `sys`: Reference to the system holding the parameters and states
-- `expand_expr=false`: If `true` the symbolic expression is expanded first.
+
+  - `eq`: Expression to convert
+  - `sys`: Reference to the system holding the parameters and unknowns
+  - `expand_expr=false`: If `true` the symbolic expression is expanded first.
 """
 function convert_to_expr(eq, expr_map; expand_expr = false)
     if expand_expr
@@ -206,10 +209,11 @@ function convert_to_expr(eq, expr_map; expand_expr = false)
 end
 
 function get_expr_map(sys)
-    dvs = ModelingToolkit.states(sys)
+    dvs = ModelingToolkit.unknowns(sys)
     ps = ModelingToolkit.parameters(sys)
-    return vcat([ModelingToolkit.toexpr(_s) => Expr(:ref, :x, i)
-                 for (i, _s) in enumerate(dvs)],
+    return vcat(
+        [ModelingToolkit.toexpr(_s) => Expr(:ref, :x, i)
+         for (i, _s) in enumerate(dvs)],
         [ModelingToolkit.toexpr(_p) => Expr(:ref, :p, i)
          for (i, _p) in enumerate(ps)])
 end
@@ -234,7 +238,8 @@ Replaces every expression `:p[i]` with its numeric value from `p`
 _replace_parameter_indices!(expr, p) = expr
 function _replace_parameter_indices!(expr::Expr, p)
     if expr.head == :ref && expr.args[1] == :p
-        p_ = p[expr.args[2]]
+        tunable, _, _ = SciMLStructures.canonicalize(SciMLStructures.Tunable(), p)
+        p_ = tunable[expr.args[2]]
         (!isa(p_, Real) || isnan(p_) || isinf(p_)) &&
             throw(ArgumentError("Expected parameters to be real valued: $(expr.args[2]) => $p_"))
         return p_
