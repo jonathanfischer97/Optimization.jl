@@ -140,9 +140,9 @@ function SciMLBase.__solve(cache::OptimizationCache{
     t0 = time()
     if isnothing(cache.lb) || isnothing(cache.ub)
         if !isnothing(f.cons)
-            # c = x -> (res = zeros(length(cache.lcons)); f.cons(res, x); res)
+            c = x -> (res = zeros(length(cache.lcons)); f.cons(res, x); res)
             cons = WorstFitnessConstraints(Float64[], Float64[], cache.lcons, cache.ucons,
-                f.cons)
+                c)
             # Check if initial_population is provided from solver_args
             if isnothing(initial_population)
                 opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
@@ -160,8 +160,8 @@ function SciMLBase.__solve(cache::OptimizationCache{
         end
     else
         if !isnothing(f.cons)
-            # c = x -> (res = zeros(length(cache.lcons)); f.cons(res, x); res)
-            cons = WorstFitnessConstraints(cache.lb, cache.ub, cache.lcons, cache.ucons, f.cons)
+            c = x -> (res = zeros(length(cache.lcons)); f.cons(res, x); res)
+            cons = WorstFitnessConstraints(cache.lb, cache.ub, cache.lcons, cache.ucons, c)
         else
             cons = BoxConstraints(cache.lb, cache.ub)
         end
