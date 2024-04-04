@@ -135,7 +135,7 @@ function SciMLBase.__solve(cache::OptimizationCache{
         maxtime = maxtime)
 
     # Extract initial_population from solver_args if provided
-    initial_population = get(cache.solver_args, :initial_population, nothing)
+    initial_population = deepcopy(get(cache.solver_args, :initial_population, nothing))
 
     t0 = time()
     if isnothing(cache.lb) || isnothing(cache.ub)
