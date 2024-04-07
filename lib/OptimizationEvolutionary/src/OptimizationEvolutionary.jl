@@ -21,8 +21,8 @@ function Evolutionary.trace!(tr, iteration, objfun, state, population,
     dt = Dict{String, Any}()
     dt["time"] = curr_time
 
-    # record `x` to store the population. Needed for constructing OptimizationState.
-    dt["x"] = deepcopy(population)
+    # record current u0. Needed for constructing OptimizationState.
+    dt["curr_u"] = population[end]
 
     # set additional trace value
     Evolutionary.trace!(dt, objfun, state, population, method, options)
@@ -45,6 +45,7 @@ function __map_optimizer_args(cache::OptimizationCache,
         abstol::Union{Number, Nothing} = nothing,
         reltol::Union{Number, Nothing} = nothing,
         initial_population::Union{AbstractArray, Nothing} = nothing,
+        F::Union{Number, AbstractArray, Nothing} = nothing,
         kwargs...)
     mapped_args = (; kwargs...)
 
@@ -107,13 +108,13 @@ function SciMLBase.__solve(cache::OptimizationCache{
 
     # Internal callback function called on trace after every iteration 
     function _cb(trace)
-        curr_u = decompose_trace(trace).metadata["x"][end]
+        curr_u = decompose_trace(trace).metadata["curr_u"]
         opt_state = Optimization.OptimizationState(;
             iter = decompose_trace(trace).iteration,
             u = curr_u,
             objective = x[1],
             original = trace)
-        cb_call = cache.callback(opt_state, decompose_trace(trace).value...)
+        cb_call = cache.callback(opt_state, trace)
         if !(cb_call isa Bool)
             error("The callback should return a boolean `halt` for whether to stop the optimization process.")
         end
@@ -141,6 +142,10 @@ function SciMLBase.__solve(cache::OptimizationCache{
     # Extract initial_population from solver_args if provided
     initial_population = deepcopy(get(cache.solver_args, :initial_population, nothing))
 
+    # Extract `zeros(_loss(cache.u0))` if given (for when `_loss` returns a tuple or other type where Base.zeros is not defined)
+    # Otherwise, use `zeros` array with same eltype and length as _loss(cache.u0)
+    _loss_zeros = get(cache.solver_args, :F, zeros(eltype(_loss(cache.u0)), length(_loss(cache.u0))))
+
     t0 = time()
     if isnothing(cache.lb) || isnothing(cache.ub)
         if !isnothing(f.cons)
@@ -149,18 +154,16 @@ function SciMLBase.__solve(cache::OptimizationCache{
                 c)
             # Check if initial_population is provided from solver_args
             if isnothing(initial_population)
-                opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
+                opt_res = Evolutionary.optimize(_loss, _loss_zeros, cons, cache.u0, cache.opt, opt_args)
             else
-                opt_res = Evolutionary.optimize(_loss, cons, cache.opt, initial_population, opt_args)
+                opt_res = Evolutionary.optimize(_loss, _loss_zeros, cons, cache.opt, initial_population, opt_args)
             end
-            # opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
         else
             if isnothing(initial_population)
-                opt_res = Evolutionary.optimize(_loss, cache.u0, cache.opt, opt_args)
+                opt_res = Evolutionary.optimize(_loss, _loss_zeros, cache.u0, cache.opt, opt_args)
             else
-                opt_res = Evolutionary.optimize(_loss, cache.opt, initial_population, opt_args)
+                opt_res = Evolutionary.optimize(_loss, _loss_zeros, cache.opt, initial_population, opt_args)
             end
-            # opt_res = Evolutionary.optimize(_loss, cache.u0, cache.opt, opt_args)
         end
     else
         if !isnothing(f.cons)
@@ -171,11 +174,10 @@ function SciMLBase.__solve(cache::OptimizationCache{
         end
 
         if isnothing(initial_population)
-            opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
+            opt_res = Evolutionary.optimize(_loss, _loss_zeros, cons, cache.u0, cache.opt, opt_args)
         else
-            opt_res = Evolutionary.optimize(_loss, cons, cache.opt, initial_population, opt_args)
+            opt_res = Evolutionary.optimize(_loss, _loss_zeros, cons, cache.opt, initial_population, opt_args)
         end
-        # opt_res = Evolutionary.optimize(_loss, cons, cache.u0, cache.opt, opt_args)
     end
     t1 = time()
     opt_ret = Symbol(Evolutionary.converged(opt_res))
